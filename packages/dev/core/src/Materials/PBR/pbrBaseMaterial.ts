@@ -42,6 +42,7 @@ import "../../Shaders/pbr.vertex";
 
 import { EffectFallbacks } from "../effectFallbacks";
 import { PBRClearCoatConfiguration } from "./pbrClearCoatConfiguration";
+import { PBRIridescenceConfiguration } from "./pbrIridescenceConfiguration";
 import { PBRAnisotropicConfiguration } from "./pbrAnisotropicConfiguration";
 import { PBRSheenConfiguration } from "./pbrSheenConfiguration";
 import { PBRSubSurfaceConfiguration } from "./pbrSubSurfaceConfiguration";
@@ -850,6 +851,11 @@ export abstract class PBRBaseMaterial extends PushMaterial {
     public readonly clearCoat: PBRClearCoatConfiguration;
 
     /**
+     * Defines the iridescence layer parameters for the material.
+     */
+    public readonly iridescence: PBRIridescenceConfiguration;
+
+    /**
      * Defines the anisotropic parameters for the material.
      */
     public readonly anisotropy: PBRAnisotropicConfiguration;
@@ -892,6 +898,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
 
         this.brdf = new PBRBRDFConfiguration(this);
         this.clearCoat = new PBRClearCoatConfiguration(this);
+        this.iridescence = new PBRIridescenceConfiguration(this);
         this.anisotropy = new PBRAnisotropicConfiguration(this);
         this.sheen = new PBRSheenConfiguration(this);
         this.subSurface = new PBRSubSurfaceConfiguration(this);
@@ -1549,7 +1556,6 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                     defines.REFLECTION = true;
                     defines.GAMMAREFLECTION = reflectionTexture.gammaSpace;
                     defines.RGBDREFLECTION = reflectionTexture.isRGBD;
-                    defines.REFLECTIONMAP_OPPOSITEZ = this.getScene().useRightHandedSystem ? !reflectionTexture.invertZ : reflectionTexture.invertZ;
                     defines.LODINREFLECTIONALPHA = reflectionTexture.lodLevelInAlpha;
                     defines.LINEARSPECULARREFLECTION = reflectionTexture.linearSpecularLOD;
 
@@ -1569,6 +1575,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
                     }
 
                     defines.REFLECTIONMAP_3D = reflectionTexture.isCube;
+                    defines.REFLECTIONMAP_OPPOSITEZ = defines.REFLECTIONMAP_3D && this.getScene().useRightHandedSystem ? !reflectionTexture.invertZ : reflectionTexture.invertZ;
 
                     defines.REFLECTIONMAP_CUBIC = false;
                     defines.REFLECTIONMAP_EXPLICIT = false;
@@ -2257,7 +2264,7 @@ export abstract class PBRBaseMaterial extends PushMaterial {
             }
 
             // View
-            if ((scene.fogEnabled && mesh.applyFog && scene.fogMode !== Scene.FOGMODE_NONE) || reflectionTexture || mesh.receiveShadows) {
+            if ((scene.fogEnabled && mesh.applyFog && scene.fogMode !== Scene.FOGMODE_NONE) || reflectionTexture || mesh.receiveShadows || defines.PREPASS) {
                 this.bindView(effect);
             }
 

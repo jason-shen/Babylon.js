@@ -2,6 +2,7 @@
 // Version
 var Versions = {
     Latest: [
+        "https://preview.babylonjs.com/timestamp.js?t=" + Date.now(),
         "https://preview.babylonjs.com/babylon.js",
         "https://preview.babylonjs.com/gui/babylon.gui.min.js",
         "https://preview.babylonjs.com/inspector/babylon.inspector.bundle.js",
@@ -66,8 +67,10 @@ const fallbackUrl = "https://babylonsnapshots.z22.web.core.windows.net/refs/head
 
 let loadScriptAsync = function (url, instantResolve) {
     return new Promise((resolve) => {
+        // eslint-disable-next-line no-undef
+        let urlToLoad = typeof globalThis !== "undefined" && globalThis.__babylonSnapshotTimestamp__ ? url + "?t=" + globalThis.__babylonSnapshotTimestamp__ : url;
         const script = document.createElement("script");
-        script.src = url;
+        script.src = urlToLoad;
         script.onload = () => {
             if (!instantResolve) {
                 resolve();
@@ -92,11 +95,11 @@ let loadScriptAsync = function (url, instantResolve) {
 };
 
 let readStringFromStore = function (key, defaultValue) {
-    if (localStorage.getItem(key) === null) {
+    if (sessionStorage.getItem(key) === null) {
         return defaultValue;
     }
 
-    return localStorage.getItem(key);
+    return sessionStorage.getItem(key);
 };
 
 let loadInSequence = async function (versions, index, resolve) {
@@ -128,15 +131,18 @@ let checkBabylonVersionAsync = function () {
     let versions = Versions[activeVersion] || Versions["Latest"];
     if (snapshot) {
         versions = versions.map((v) => v.replace("https://preview.babylonjs.com", "https://babylonsnapshots.z22.web.core.windows.net/" + snapshot));
-    } else if (window.location.href.includes("debug.html") && activeVersion === "Latest") {
+    } else if (window.location.href.includes("debug.html")) {
         versions = versions.map((v) => {
-            if (!v.includes("https://preview.babylonjs.com")) {
+            if (!v.includes("https://preview.babylonjs.com") && !v.includes("https://cdn.jsdelivr.net/gh/BabylonJS/Babylon.js")) {
                 return v;
             }
-            if (v.includes(".min")) {
+            if(v.includes("timestamp.js")) {
+                return v;
+            }
+            if (v.includes(".min.")) {
                 return v.replace(".min", "");
             } else {
-                return v.replace(".js", ".max.js");
+                return v.replace("babylon.js", "babylon.max.js");
             }
         });
     }
