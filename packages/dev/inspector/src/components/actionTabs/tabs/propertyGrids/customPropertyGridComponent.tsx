@@ -15,6 +15,8 @@ import type { LockObject } from "shared-ui-components/tabs/propertyGrids/lockObj
 import { ButtonLineComponent } from "shared-ui-components/lines/buttonLineComponent";
 import { OptionsLineComponent } from "shared-ui-components/lines/optionsLineComponent";
 import { TextLineComponent } from "shared-ui-components/lines/textLineComponent";
+import { FileButtonLineComponent } from "shared-ui-components/lines/fileButtonLineComponent";
+import { Logger } from "core/Misc/logger";
 
 interface ICustomPropertyGridComponentProps {
     globalState: GlobalState;
@@ -44,6 +46,7 @@ export class CustomPropertyGridComponent extends React.Component<ICustomProperty
             case InspectableType.Slider:
                 return (
                     <SliderLineComponent
+                        lockObject={this.props.lockObject}
                         key={inspectable.label}
                         label={inspectable.label}
                         target={this.props.target}
@@ -57,6 +60,7 @@ export class CustomPropertyGridComponent extends React.Component<ICustomProperty
             case InspectableType.Vector3:
                 return (
                     <Vector3LineComponent
+                        lockObject={this.props.lockObject}
                         key={inspectable.label}
                         label={inspectable.label}
                         target={this.props.target}
@@ -67,6 +71,7 @@ export class CustomPropertyGridComponent extends React.Component<ICustomProperty
             case InspectableType.Quaternion:
                 return (
                     <QuaternionLineComponent
+                        lockObject={this.props.lockObject}
                         useEuler={this.props.globalState.onlyUseEulers}
                         key={inspectable.label}
                         label={inspectable.label}
@@ -78,6 +83,7 @@ export class CustomPropertyGridComponent extends React.Component<ICustomProperty
             case InspectableType.Color3:
                 return (
                     <Color3LineComponent
+                        lockObject={this.props.lockObject}
                         key={inspectable.label}
                         label={inspectable.label}
                         target={this.props.target}
@@ -127,6 +133,20 @@ export class CustomPropertyGridComponent extends React.Component<ICustomProperty
                 );
             case InspectableType.Tab:
                 return <TextLineComponent key={inspectable.label} label={inspectable.label} value={" "} />;
+            case InspectableType.FileButton:
+                return (
+                    <FileButtonLineComponent
+                        key={inspectable.label}
+                        label={inspectable.label}
+                        onClick={
+                            inspectable.fileCallback ||
+                            function () {
+                                Logger.Warn("no file call back function added");
+                            }
+                        }
+                        accept={inspectable.accept || "*"}
+                    />
+                );
         }
 
         return null;

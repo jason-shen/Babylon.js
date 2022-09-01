@@ -16,7 +16,6 @@ import type { Material } from "../Materials/material";
 import { StandardMaterial } from "../Materials/standardMaterial";
 import { MultiMaterial } from "../Materials/multiMaterial";
 import type { PickingInfo } from "../Collisions/pickingInfo";
-import { Tools } from "../Misc/tools";
 
 /**
  * The SPS is a single updatable mesh. The solid particles are simply separate parts or faces fo this big mesh.
@@ -150,6 +149,7 @@ export class SolidParticleSystem implements IDisposable {
     private _defaultMaterial: Material;
     private _autoUpdateSubMeshes: boolean = false;
     private _tmpVertex: SolidParticleVertex;
+    private _recomputeInvisibles: boolean = false;
 
     /**
      * Creates a SPS (Solid Particle System) object.
@@ -165,6 +165,7 @@ export class SolidParticleSystem implements IDisposable {
      * * particleIntersection (optional boolean, default false) : if the solid particle intersections must be computed.
      * * boundingSphereOnly (optional boolean, default false) : if the particle intersection must be computed only with the bounding sphere (no bounding box computation, so faster).
      * * bSphereRadiusFactor (optional float, default 1.0) : a number to multiply the bounding sphere radius by in order to reduce it for instance.
+     * * computeBoundingBox (optional boolean, default false): if the bounding box of the entire SPS will be computed (for occlusion detection, for example). If it is false, the bounding box will be the bounding box of the first particle.
      * @param options.updatable
      * @param options.isPickable
      * @param options.enableDepthSort
@@ -174,6 +175,7 @@ export class SolidParticleSystem implements IDisposable {
      * @param options.expandable
      * @param options.useModelMaterial
      * @param options.enableMultiMaterial
+     * @param options.computeBoundingBox
      * @example bSphereRadiusFactor = 1.0 / Math.sqrt(3.0) => the bounding sphere exactly matches a spherical mesh.
      */
     constructor(
@@ -189,6 +191,7 @@ export class SolidParticleSystem implements IDisposable {
             expandable?: boolean;
             useModelMaterial?: boolean;
             enableMultiMaterial?: boolean;
+            computeBoundingBox?: boolean;
         }
     ) {
         this.name = name;
@@ -203,6 +206,7 @@ export class SolidParticleSystem implements IDisposable {
         this._particlesIntersect = options ? <boolean>options.particleIntersection : false;
         this._bSphereOnly = options ? <boolean>options.boundingSphereOnly : false;
         this._bSphereRadiusFactor = options && options.bSphereRadiusFactor ? options.bSphereRadiusFactor : 1.0;
+        this._computeBoundingBox = options?.computeBoundingBox ? options.computeBoundingBox : false;
         if (options && options.updatable !== undefined) {
             this._updatable = options.updatable;
         } else {
@@ -311,6 +315,7 @@ export class SolidParticleSystem implements IDisposable {
         }
         this._isNotBuilt = false;
         this.recomputeNormals = false;
+        this._recomputeInvisibles = true;
         return this.mesh;
     }
 
@@ -394,9 +399,9 @@ export class SolidParticleSystem implements IDisposable {
             let idx: number = this.nbParticles;
             const shape: Vector3[] = this._posToShape(facetPos);
             const shapeUV: number[] = this._uvsToShapeUV(facetUV);
-            const shapeInd = Tools.Slice(facetInd);
-            const shapeCol = Tools.Slice(facetCol);
-            const shapeNor = Tools.Slice(facetNor);
+            const shapeInd = facetInd.slice();
+            const shapeCol = facetCol.slice();
+            const shapeNor = facetNor.slice();
 
             // compute the barycenter of the shape
             barycenter.copyFromFloats(0, 0, 0);
@@ -751,9 +756,9 @@ export class SolidParticleSystem implements IDisposable {
         const meshCol = <FloatArray>mesh.getVerticesData(VertexBuffer.ColorKind);
         const meshNor = <FloatArray>mesh.getVerticesData(VertexBuffer.NormalKind);
         this.recomputeNormals = meshNor ? false : true;
-        const indices = Tools.SliceToArray<IndicesArray, number>(meshInd);
-        const shapeNormals = Tools.SliceToArray<number[] | Float32Array, number>(meshNor);
-        const shapeColors = meshCol ? Tools.SliceToArray<number[] | Float32Array, number>(meshCol) : [];
+        const indices = Array.from(meshInd);
+        const shapeNormals = Array.from(meshNor);
+        const shapeColors = meshCol ? Array.from(meshCol) : [];
         const storage = options && options.storage ? options.storage : null;
         let bbInfo: Nullable<BoundingInfo> = null;
         if (this._particlesIntersect) {
@@ -1171,7 +1176,7 @@ export class SolidParticleSystem implements IDisposable {
             }
 
             // skip the computations for inactive or already invisible particles
-            if (!particle.alive || (particle._stillInvisible && !particle.isVisible)) {
+            if (!particle.alive || (particle._stillInvisible && !particle.isVisible && !this._recomputeInvisibles)) {
                 // increment indexes for the next particle
                 pt = shape.length;
                 index += pt * 3;
@@ -1484,6 +1489,7 @@ export class SolidParticleSystem implements IDisposable {
         if (this._autoUpdateSubMeshes) {
             this.computeSubMeshes();
         }
+        this._recomputeInvisibles = false;
         this.afterUpdateParticles(start, end, update);
         return this;
     }

@@ -37,6 +37,9 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
         wasmZSTDDecoder: baseUrl + "/zstddec.wasm",
     };
 
+    BABYLON.BasisToolsOptions.JSModuleURL = baseUrl + "/basisTranscoder/1/basis_transcoder.js";
+    BABYLON.BasisToolsOptions.WasmModuleURL = baseUrl + "/basisTranscoder/1/basis_transcoder.wasm";
+
     window.forceUseReverseDepthBuffer = useReverseDepthBuffer === 1 || useReverseDepthBuffer === "true";
     window.forceUseNonCompatibilityMode = useNonCompatibilityMode === 1 || useNonCompatibilityMode === "true";
 
@@ -88,6 +91,7 @@ export const evaluateInitEngineForVisualization = async (engineName: string, use
         window.engine = engine;
     }
     window.engine!.renderEvenInBackground = true;
+    window.engine.getCaps().parallelShaderCompile = undefined;
     return {
         forceUseReverseDepthBuffer: window.forceUseReverseDepthBuffer,
         forceUseNonCompatibilityMode: window.forceUseNonCompatibilityMode,
@@ -230,11 +234,17 @@ export const evaluateRenderSceneForVisualization = async (renderCount: number) =
             }
             window.engine.runRenderLoop(function () {
                 try {
-                    window.scene && window.scene.render();
-                    renderCount--;
-                    if (renderCount <= 0 && window.scene!.isReady()) {
-                        window.engine && window.engine.stopRenderLoop();
-                        return resolve(true);
+                    if (renderCount === 0) {
+                        if (window.scene!.isReady()) {
+                            window.engine && window.engine.stopRenderLoop();
+                            return resolve(true);
+                        } else {
+                            console.error("Scene is not ready after rendering is done");
+                            return resolve(false);
+                        }
+                    } else {
+                        window.scene && window.scene.render();
+                        renderCount--;
                     }
                 } catch (e) {
                     window.engine && window.engine.stopRenderLoop();

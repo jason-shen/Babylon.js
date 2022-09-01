@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import type { DeviceType } from "../../DeviceInput/InputDevices/deviceEnums";
-import type { IDeviceInputSystem } from "../../DeviceInput/InputDevices/inputInterfaces";
+import type { IDeviceInputSystem } from "../../DeviceInput/inputInterfaces";
 import type { InternalTexture } from "../../Materials/Textures/internalTexture";
 import type { Nullable } from "../../types";
 import type { ICanvas, IImage } from "../ICanvas";
@@ -55,6 +55,17 @@ export interface INativeEngine {
     getTextureHeight(texture: WebGLTexture): number;
     copyTexture(desination: Nullable<WebGLTexture>, source: Nullable<WebGLTexture>): void;
     deleteTexture(texture: Nullable<WebGLTexture>): void;
+    readTexture(
+        texture: WebGLTexture,
+        mipLevel: number,
+        x: number,
+        y: number,
+        width: number,
+        height: number,
+        buffer: Nullable<ArrayBuffer>,
+        bufferOffset: number,
+        bufferLength: number
+    ): Promise<ArrayBuffer>;
 
     createImageBitmap(data: ArrayBufferView | IImage): ImageBitmap;
     resizeImageBitmap(image: ImageBitmap, bufferWidth: number, bufferHeight: number): Uint8Array;

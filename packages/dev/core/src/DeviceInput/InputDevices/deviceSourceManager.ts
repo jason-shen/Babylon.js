@@ -4,8 +4,8 @@ import type { Nullable } from "../../types";
 import type { Observer } from "../../Misc/observable";
 import { Observable } from "../../Misc/observable";
 import type { DeviceSource } from "./deviceSource";
-import type { IObservableManager, DeviceSourceType } from "./internalDeviceSourceManager";
-import { InternalDeviceSourceManager } from "./internalDeviceSourceManager";
+import type { IObservableManager, DeviceSourceType } from "../internalDeviceSourceManager";
+import { InternalDeviceSourceManager } from "../internalDeviceSourceManager";
 import type { IDisposable } from "../../scene";
 import type { ThinEngine } from "../../Engines/thinEngine";
 import type { IKeyboardEvent, IPointerEvent, IUIEvent, IWheelEvent } from "../../Events/deviceInputEvents";
@@ -59,6 +59,10 @@ export class DeviceSourceManager implements IDisposable, IObservableManager {
      * @returns All available DeviceSources of a given type
      */
     public getDeviceSources<T extends DeviceType>(deviceType: T): ReadonlyArray<DeviceSource<T>> {
+        // If device type hasn't had any devices connected yet, return empty array.
+        if (!this._devices[deviceType]) {
+            return [];
+        }
         return this._devices[deviceType].filter((source) => {
             return !!source;
         }) as Array<DeviceSource<T>>;

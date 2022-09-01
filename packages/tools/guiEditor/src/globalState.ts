@@ -49,6 +49,7 @@ export class GlobalState {
     private _backgroundColor: Color3;
     private _outlines: boolean = false;
     public keys: KeyboardManager;
+    private _fromPG: boolean;
     /** DO NOT USE: in the process of removing */
     public blockKeyboardEvents = false;
     onOutlineChangedObservable = new Observable<void>();
@@ -58,11 +59,12 @@ export class GlobalState {
     onPropertyChangedObservable = new Observable<PropertyChangedEvent>();
 
     private _tool: GUIEditorTool = GUIEditorTool.SELECT;
+    private _prevTool: GUIEditorTool = this._tool;
     onToolChangeObservable = new Observable<void>();
     public get tool(): GUIEditorTool {
         if (this._tool === GUIEditorTool.ZOOM) {
             return GUIEditorTool.ZOOM;
-        } else if (this._tool === GUIEditorTool.PAN || this.keys.isKeyDown("space")) {
+        } else if (this._tool === GUIEditorTool.PAN) {
             return GUIEditorTool.PAN;
         } else {
             return GUIEditorTool.SELECT;
@@ -70,8 +72,16 @@ export class GlobalState {
     }
     public set tool(newTool: GUIEditorTool) {
         if (this._tool === newTool) return;
+        this._prevTool = this._tool;
         this._tool = newTool;
         this.onToolChangeObservable.notifyObservers();
+    }
+
+    public restorePreviousTool() {
+        if (this._tool !== this._prevTool) {
+            this._tool = this._prevTool;
+            this.onToolChangeObservable.notifyObservers();
+        }
     }
     onFitControlsToWindowObservable = new Observable<void>();
     onReframeWindowObservable = new Observable<void>();
@@ -149,6 +159,12 @@ export class GlobalState {
     public get backgroundColor() {
         return this._backgroundColor;
     }
+    public get fromPG() {
+        return this._fromPG;
+    }
+    public set fromPG(value: boolean) {
+        this._fromPG = value;
+    }
 
     public set backgroundColor(value: Color3) {
         this._backgroundColor = value;
@@ -189,7 +205,7 @@ export class GlobalState {
         const searchList = [texture.rootContainer];
         while (searchList.length > 0) {
             const current = searchList.splice(0, 1)[0];
-            const children = current._children;
+            const children = current.children;
             if (children.indexOf(searchedControl) !== -1) {
                 return current;
             }

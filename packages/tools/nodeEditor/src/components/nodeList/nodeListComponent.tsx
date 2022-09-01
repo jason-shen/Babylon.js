@@ -19,7 +19,7 @@ interface INodeListComponentProps {
 }
 
 export class NodeListComponent extends React.Component<INodeListComponentProps, { filter: string }> {
-    private _onResetRequiredObserver: Nullable<Observer<void>>;
+    private _onResetRequiredObserver: Nullable<Observer<boolean>>;
 
     private static _Tooltips: { [key: string]: string } = {
         BonesBlock: "Provides a world matrix for each vertex, based on skeletal (bone/joint) animation",
@@ -167,6 +167,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
         TwirlBlock: "Apply a twirl rotation",
         ElbowBlock: "Passthrough block mostly used to organize your graph",
         ClipPlanesBlock: "A node that add clip planes support",
+        HeightToNormalBlock: "Convert a height map into a normal map",
     };
 
     private _customFrameList: { [key: string]: string };
@@ -213,7 +214,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 try {
                     localStorage.setItem(frameName, JSON.stringify(frameData));
                 } catch (error) {
-                    this.props.globalState.onErrorMessageDialogRequiredObservable.notifyObservers("Error Saving Frame");
+                    this.props.globalState.stateManager.onErrorMessageDialogRequiredObservable.notifyObservers("Error Saving Frame");
                     return;
                 }
 
@@ -257,7 +258,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 try {
                     localStorage.setItem(blockName, JSON.stringify(blockData));
                 } catch (error) {
-                    this.props.globalState.onErrorMessageDialogRequiredObservable.notifyObservers("Error Saving Block");
+                    this.props.globalState.stateManager.onErrorMessageDialogRequiredObservable.notifyObservers("Error Saving Block");
                     return;
                 }
 
@@ -391,6 +392,7 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                 "ColorBlock",
                 "InstanceColorBlock",
                 "NormalBlock",
+                "HeightToNormalBlock",
                 "TBNBlock",
                 "PerturbNormalBlock",
                 "NormalBlendBlock",
@@ -547,9 +549,9 @@ export class NodeListComponent extends React.Component<INodeListComponentProps, 
                             <input
                                 type="text"
                                 placeholder="Filter"
-                                onFocus={() => (this.props.globalState.blockKeyboardEvents = true)}
+                                onFocus={() => (this.props.globalState.lockObject.lock = true)}
                                 onBlur={() => {
-                                    this.props.globalState.blockKeyboardEvents = false;
+                                    this.props.globalState.lockObject.lock = false;
                                 }}
                                 onChange={(evt) => this.filterContent(evt.target.value)}
                             />

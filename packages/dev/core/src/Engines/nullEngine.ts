@@ -178,6 +178,7 @@ export class NullEngine extends Engine {
             needShaderCodeInlining: false,
             needToAlwaysBindUniformBuffers: false,
             supportRenderPasses: true,
+            supportSpriteInstancing: false,
             _collectUbosUpdatedInFrame: false,
         };
 
@@ -660,7 +661,7 @@ export class NullEngine extends Engine {
         invertY: boolean,
         scene: Nullable<ISceneLike>,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        onLoad: Nullable<() => void> = null,
+        onLoad: Nullable<(texture: InternalTexture) => void> = null,
         onError: Nullable<(message: string, exception: any) => void> = null,
         buffer: Nullable<string | ArrayBuffer | ArrayBufferView | HTMLImageElement | Blob | ImageBitmap> = null,
         fallback: Nullable<InternalTexture> = null,
@@ -687,7 +688,7 @@ export class NullEngine extends Engine {
 
         if (onLoad) {
             setTimeout(() => {
-                onLoad();
+                onLoad(texture);
             });
         }
 

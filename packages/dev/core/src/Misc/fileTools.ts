@@ -162,7 +162,7 @@ export const LoadImage = (
     let usingObjectURL = false;
 
     if (input instanceof ArrayBuffer || ArrayBuffer.isView(input)) {
-        if (typeof Blob !== "undefined") {
+        if (typeof Blob !== "undefined" && typeof URL !== "undefined") {
             url = URL.createObjectURL(new Blob([input], { type: mimeType }));
             usingObjectURL = true;
         } else {
@@ -245,7 +245,22 @@ export const LoadImage = (
     img.addEventListener("error", errorHandler);
 
     const noOfflineSupport = () => {
-        img.src = url;
+        LoadFile(
+            url,
+            (data, _, contentType) => {
+                const type = !mimeType && contentType ? contentType : mimeType;
+                const blob = new Blob([data], { type });
+                const url = URL.createObjectURL(blob);
+                usingObjectURL = true;
+                img.src = url;
+            },
+            undefined,
+            offlineProvider || undefined,
+            true,
+            (request, exception) => {
+                onErrorHandler(exception);
+            }
+        );
     };
 
     const loadFromOfflineSupport = () => {
@@ -259,7 +274,7 @@ export const LoadImage = (
     } else {
         if (url.indexOf("file:") !== -1) {
             const textureName = decodeURIComponent(url.substring(5).toLowerCase());
-            if (FilesInputStore.FilesToLoad[textureName]) {
+            if (FilesInputStore.FilesToLoad[textureName] && typeof URL !== "undefined") {
                 try {
                     let blobURL;
                     try {
@@ -344,7 +359,7 @@ export const ReadFile = (
 // eslint-disable-next-line @typescript-eslint/naming-convention
 export const LoadFile = (
     fileOrUrl: File | string,
-    onSuccess: (data: string | ArrayBuffer, responseURL?: string) => void,
+    onSuccess: (data: string | ArrayBuffer, responseURL?: string, contentType?: Nullable<string>) => void,
     onProgress?: (ev: ProgressEvent) => void,
     offlineProvider?: IOfflineProvider,
     useArrayBuffer?: boolean,
@@ -406,7 +421,7 @@ export const LoadFile = (
     return RequestFile(
         url,
         (data, request) => {
-            onSuccess(data, request ? request.responseURL : undefined);
+            onSuccess(data, request?.responseURL, request?.getResponseHeader("content-type"));
         },
         onProgress,
         offlineProvider,

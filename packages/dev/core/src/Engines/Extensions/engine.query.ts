@@ -136,7 +136,11 @@ declare module "../../Engines/engine" {
 }
 
 Engine.prototype.createQuery = function (): OcclusionQuery {
-    return this._gl.createQuery();
+    const query = this._gl.createQuery();
+    if (!query) {
+        throw new Error("Unable to create Occlusion Query");
+    }
+    return query;
 };
 
 Engine.prototype.deleteQuery = function (query: OcclusionQuery): Engine {
@@ -259,6 +263,7 @@ Engine.prototype.endTimeQuery = function (token: _TimeToken): int {
             timerQuery.endQueryEXT(timerQuery.TIME_ELAPSED_EXT);
         } else {
             this._gl.endQuery(timerQuery.TIME_ELAPSED_EXT);
+            this._currentNonTimestampToken = null;
         }
         token._timeElapsedQueryEnded = true;
     }
@@ -294,7 +299,6 @@ Engine.prototype.endTimeQuery = function (token: _TimeToken): int {
             this._deleteTimeQuery(token._timeElapsedQuery);
             token._timeElapsedQuery = null;
             token._timeElapsedQueryEnded = false;
-            this._currentNonTimestampToken = null;
         }
         return result;
     }

@@ -19,7 +19,7 @@ import { CreateImageDataArrayBufferViews, GetEnvInfo, UploadEnvSpherical } from 
 import type { Scene } from "../scene";
 import type { RenderTargetCreationOptions, TextureSize, DepthTextureCreationOptions } from "../Materials/Textures/textureCreationOptions";
 import type { IPipelineContext } from "./IPipelineContext";
-import type { IMatrixLike, IVector2Like, IVector3Like, IVector4Like, IColor3Like, IColor4Like, IViewportLike } from "../Maths/math.like";
+import type { IMatrixLike, IVector2Like, IVector3Like, IVector4Like, IColor3Like, IColor4Like, IViewportLike, IQuaternionLike } from "../Maths/math.like";
 import { Logger } from "../Misc/logger";
 import { Constants } from "./constants";
 import type { ISceneLike } from "./thinEngine";
@@ -604,6 +604,19 @@ class NativePipelineContext implements IPipelineContext {
     }
 
     /**
+     * Sets a Quaternion on a uniform variable.
+     * @param uniformName Name of the variable.
+     * @param quaternion Value to be set.
+     */
+    public setQuaternion(uniformName: string, quaternion: IQuaternionLike): void {
+        if (this._cacheFloat4(uniformName, quaternion.x, quaternion.y, quaternion.z, quaternion.w)) {
+            if (!this.engine.setFloat4(this._uniforms[uniformName]!, quaternion.x, quaternion.y, quaternion.z, quaternion.w)) {
+                this._valueCache[uniformName] = null;
+            }
+        }
+    }
+
+    /**
      * Sets a float4 on a uniform variable.
      * @param uniformName Name of the variable.
      * @param x First float in float4.
@@ -877,7 +890,7 @@ export class NativeEngine extends Engine {
             drawBuffersExtension: false,
             depthTextureExtension: false,
             vertexArrayObject: true,
-            instancedArrays: false,
+            instancedArrays: true,
             supportOcclusionQuery: false,
             canUseTimestampForTimerQuery: false,
             blendMinMax: false,
@@ -914,6 +927,7 @@ export class NativeEngine extends Engine {
             needShaderCodeInlining: true,
             needToAlwaysBindUniformBuffers: false,
             supportRenderPasses: true,
+            supportSpriteInstancing: false,
             _collectUbosUpdatedInFrame: false,
         };
 
@@ -1075,7 +1089,13 @@ export class NativeEngine extends Engine {
         return buffer;
     }
 
-    protected _recordVertexArrayObject(vertexArray: any, vertexBuffers: { [key: string]: VertexBuffer }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): void {
+    protected _recordVertexArrayObject(
+        vertexArray: any,
+        vertexBuffers: { [key: string]: VertexBuffer },
+        indexBuffer: Nullable<NativeDataBuffer>,
+        effect: Effect,
+        overrideVertexBuffers?: { [kind: string]: Nullable<VertexBuffer> }
+    ): void {
         if (indexBuffer) {
             this._engine.recordIndexBuffer(vertexArray, indexBuffer.nativeIndexBuffer!);
         }
@@ -1085,10 +1105,18 @@ export class NativeEngine extends Engine {
             const location = effect.getAttributeLocation(index);
             if (location >= 0) {
                 const kind = attributes[index];
-                const vertexBuffer = vertexBuffers[kind];
+                let vertexBuffer: Nullable<VertexBuffer> = null;
+
+                if (overrideVertexBuffers) {
+                    vertexBuffer = overrideVertexBuffers[kind];
+                }
+                if (!vertexBuffer) {
+                    vertexBuffer = vertexBuffers[kind];
+                }
+
                 if (vertexBuffer) {
                     const buffer = vertexBuffer.getBuffer() as Nullable<NativeDataBuffer>;
-                    if (buffer) {
+                    if (buffer && buffer.nativeVertexBuffer) {
                         this._engine.recordVertexBuffer(
                             vertexArray,
                             buffer.nativeVertexBuffer!,
@@ -1115,9 +1143,14 @@ export class NativeEngine extends Engine {
         this.bindVertexArrayObject(this._boundBuffersVertexArray);
     }
 
-    public recordVertexArrayObject(vertexBuffers: { [key: string]: VertexBuffer }, indexBuffer: Nullable<NativeDataBuffer>, effect: Effect): WebGLVertexArrayObject {
+    public recordVertexArrayObject(
+        vertexBuffers: { [key: string]: VertexBuffer },
+        indexBuffer: Nullable<NativeDataBuffer>,
+        effect: Effect,
+        overrideVertexBuffers?: { [kind: string]: Nullable<VertexBuffer> }
+    ): WebGLVertexArrayObject {
         const vertexArray = this._engine.createVertexArray();
-        this._recordVertexArrayObject(vertexArray, vertexBuffers, indexBuffer, effect);
+        this._recordVertexArrayObject(vertexArray, vertexBuffers, indexBuffer, effect, overrideVertexBuffers);
         return vertexArray;
     }
 
@@ -2222,7 +2255,7 @@ export class NativeEngine extends Engine {
         invertY: boolean,
         scene: Nullable<ISceneLike>,
         samplingMode: number = Constants.TEXTURE_TRILINEAR_SAMPLINGMODE,
-        onLoad: Nullable<() => void> = null,
+        onLoad: Nullable<(texture: InternalTexture) => void> = null,
         onError: Nullable<(message: string, exception: any) => void> = null,
         buffer: Nullable<string | ArrayBuffer | ArrayBufferView | HTMLImageElement | Blob | ImageBitmap> = null,
         fallback: Nullable<InternalTexture> = null,
@@ -2258,7 +2291,7 @@ export class NativeEngine extends Engine {
         }
 
         if (scene) {
-            scene._addPendingData(texture);
+            scene.addPendingData(texture);
         }
         texture.url = url;
         texture.generateMipMaps = !noMipmap;
@@ -2282,7 +2315,7 @@ export class NativeEngine extends Engine {
 
         const onInternalError = (message?: string, exception?: any) => {
             if (scene) {
-                scene._removePendingData(texture);
+                scene.removePendingData(texture);
             }
 
             if (url === originalUrl) {
@@ -2311,7 +2344,7 @@ export class NativeEngine extends Engine {
             const onload = (data: ArrayBufferView) => {
                 if (!texture._hardwareTexture) {
                     if (scene) {
-                        scene._removePendingData(texture);
+                        scene.removePendingData(texture);
                     }
 
                     return;
@@ -2336,7 +2369,7 @@ export class NativeEngine extends Engine {
                         this._setTextureSampling(underlyingResource, filter);
 
                         if (scene) {
-                            scene._removePendingData(texture);
+                            scene.removePendingData(texture);
                         }
 
                         texture.onLoadedObservable.notifyObservers(texture);
@@ -3204,5 +3237,42 @@ export class NativeEngine extends Engine {
         // TODO
         const result = { ascent: 0, height: 0, descent: 0 };
         return result;
+    }
+
+    public _readTexturePixels(
+        texture: InternalTexture,
+        width: number,
+        height: number,
+        faceIndex?: number,
+        level?: number,
+        buffer?: Nullable<ArrayBufferView>,
+        flushRenderer?: boolean,
+        noDataConversion?: boolean,
+        x?: number,
+        y?: number
+    ): Promise<ArrayBufferView> {
+        if (faceIndex !== undefined && faceIndex !== -1) {
+            throw new Error(`Reading cubemap faces is not supported, but faceIndex is ${faceIndex}.`);
+        }
+
+        return this._engine
+            .readTexture(
+                texture._hardwareTexture?.underlyingResource,
+                level ?? 0,
+                x ?? 0,
+                y ?? 0,
+                width,
+                height,
+                buffer?.buffer ?? null,
+                buffer?.byteOffset ?? 0,
+                buffer?.byteLength ?? 0
+            )
+            .then((rawBuffer) => {
+                if (!buffer) {
+                    buffer = new Uint8Array(rawBuffer);
+                }
+
+                return buffer;
+            });
     }
 }

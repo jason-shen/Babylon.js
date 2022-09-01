@@ -12,7 +12,6 @@ import { DeepCopier } from "../Misc/deepCopier";
 import { TransformNode } from "./transformNode";
 import type { Light } from "../Lights/light";
 import { VertexBuffer } from "../Buffers/buffer";
-import { Tools } from "../Misc/tools";
 
 Mesh._instancedMeshFactory = (name: string, mesh: Mesh): InstancedMesh => {
     const instance = new InstancedMesh(name, mesh);
@@ -60,7 +59,7 @@ export class InstancedMesh extends AbstractMesh {
             this.rotationQuaternion = source.rotationQuaternion.clone();
         }
 
-        this.animations = Tools.Slice(source.animations);
+        this.animations = source.animations.slice();
         for (const range of source.getAnimationRanges()) {
             if (range != null) {
                 this.createAnimationRange(range.name, range.from, range.to);
@@ -454,17 +453,16 @@ export class InstancedMesh extends AbstractMesh {
 
     /**
      * Creates a new InstancedMesh from the current mesh.
-     * - name (string) : the cloned mesh name
-     * - newParent (optional Node) : the optional Node to parent the clone to.
-     * - doNotCloneChildren (optional boolean, default `false`) : if `true` the model children aren't cloned.
      *
      * Returns the clone.
-     * @param name
-     * @param newParent
-     * @param doNotCloneChildren
+     * @param name the cloned mesh name
+     * @param newParent the optional Node to parent the clone to.
+     * @param doNotCloneChildren if `true` the model children aren't cloned.
+     * @param newSourceMesh if set this mesh will be used as the source mesh instead of ths instance's one
+     * @returns the clone
      */
-    public clone(name: string, newParent: Nullable<Node> = null, doNotCloneChildren?: boolean): InstancedMesh {
-        const result = this._sourceMesh.createInstance(name);
+    public clone(name: string, newParent: Nullable<Node> = null, doNotCloneChildren?: boolean, newSourceMesh?: Mesh): InstancedMesh {
+        const result = (newSourceMesh || this._sourceMesh).createInstance(name);
 
         // Deep copy
         DeepCopier.DeepCopy(
@@ -541,6 +539,46 @@ export class InstancedMesh extends AbstractMesh {
         // Remove from mesh
         this._sourceMesh.removeInstance(this);
         super.dispose(doNotRecurse, disposeMaterialAndTextures);
+    }
+
+    /**
+     * @param serializationObject
+     * @hidden
+     */
+    public _serializeAsParent(serializationObject: any) {
+        super._serializeAsParent(serializationObject);
+
+        serializationObject.parentId = this._sourceMesh.uniqueId;
+        serializationObject.parentInstanceIndex = this._indexInSourceMeshInstanceArray;
+    }
+
+    /**
+     * Instantiate (when possible) or clone that node with its hierarchy
+     * @param newParent defines the new parent to use for the instance (or clone)
+     * @param options defines options to configure how copy is done
+     * @param options.doNotInstantiate defines if the model must be instantiated or just cloned
+     * @param options.newSourcedMesh newSourcedMesh the new source mesh for the instance (or clone)
+     * @param onNewNodeCreated defines an option callback to call when a clone or an instance is created
+     * @returns an instance (or a clone) of the current node with its hierarchy
+     */
+    public instantiateHierarchy(
+        newParent: Nullable<TransformNode> = null,
+        options?: { doNotInstantiate: boolean | ((node: TransformNode) => boolean); newSourcedMesh?: Mesh },
+        onNewNodeCreated?: (source: TransformNode, clone: TransformNode) => void
+    ): Nullable<TransformNode> {
+        const clone = this.clone("Clone of " + (this.name || this.id), newParent || this.parent, true, options && options.newSourcedMesh);
+
+        if (clone) {
+            if (onNewNodeCreated) {
+                onNewNodeCreated(this, clone);
+            }
+        }
+
+        for (const child of this.getChildTransformNodes(true)) {
+            child.instantiateHierarchy(clone, options, onNewNodeCreated);
+        }
+
+        return clone;
     }
 }
 

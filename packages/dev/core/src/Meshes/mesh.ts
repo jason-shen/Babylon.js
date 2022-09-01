@@ -625,8 +625,9 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                 Tags.AddTagsTo(this, Tags.GetTags(source, true));
             }
 
-            // Enabled
-            this.setEnabled(source.isEnabled());
+            // Enabled. We shouldn't need to check the source's ancestors, as this mesh
+            // will have the same ones.
+            this.setEnabled(source.isEnabled(false));
 
             // Parent
             this.parent = source.parent;
@@ -718,13 +719,13 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
     public instantiateHierarchy(
         newParent: Nullable<TransformNode> = null,
-        options?: { doNotInstantiate: boolean },
+        options?: { doNotInstantiate: boolean | ((node: TransformNode) => boolean) },
         onNewNodeCreated?: (source: TransformNode, clone: TransformNode) => void
     ): Nullable<TransformNode> {
         const instance =
-            this.getTotalVertices() > 0 && (!options || !options.doNotInstantiate)
-                ? this.createInstance("instance of " + (this.name || this.id))
-                : this.clone("Clone of " + (this.name || this.id), newParent || this.parent, true);
+            this.getTotalVertices() === 0 || (options && options.doNotInstantiate && (options.doNotInstantiate === true || options.doNotInstantiate(this)))
+                ? this.clone("Clone of " + (this.name || this.id), newParent || this.parent, true)
+                : this.createInstance("instance of " + (this.name || this.id));
 
         instance.parent = newParent || this.parent;
         instance.position = this.position.clone();
@@ -740,7 +741,19 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         }
 
         for (const child of this.getChildTransformNodes(true)) {
-            child.instantiateHierarchy(instance, options, onNewNodeCreated);
+            // instancedMesh should have a different sourced mesh
+            if (child.getClassName() === "InstancedMesh" && instance.getClassName() === "Mesh") {
+                (child as InstancedMesh).instantiateHierarchy(
+                    instance,
+                    {
+                        doNotInstantiate: (options && options.doNotInstantiate) || false,
+                        newSourcedMesh: instance as Mesh,
+                    },
+                    onNewNodeCreated
+                );
+            } else {
+                child.instantiateHierarchy(instance, options, onNewNodeCreated);
+            }
         }
 
         return instance;
@@ -2546,7 +2559,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
     }
 
     private _queueLoad(scene: Scene): Mesh {
-        scene._addPendingData(this);
+        scene.addPendingData(this);
 
         const getBinaryData = this.delayLoadingFile.indexOf(".babylonbinarymeshdata") !== -1;
 
@@ -2565,7 +2578,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                 });
 
                 this.delayLoadState = Constants.DELAYLOADSTATE_LOADED;
-                scene._removePendingData(this);
+                scene.removePendingData(this);
             },
             () => {},
             scene.offlineProvider,
@@ -3137,7 +3150,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         // Updating vertex buffers
         for (kindIndex = 0; kindIndex < kinds.length; kindIndex++) {
             kind = kinds[kindIndex];
-            this.setVerticesData(kind, newdata[kind], vbs[kind].isUpdatable());
+            this.setVerticesData(kind, newdata[kind], vbs[kind].isUpdatable(), vbs[kind].getStrideSize());
         }
 
         // Updating submeshes
@@ -3572,7 +3585,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
         // Parent
         if (this.parent) {
-            serializationObject.parentId = this.parent.uniqueId;
+            this.parent._serializeAsParent(serializationObject);
         }
 
         // Geometry
@@ -3657,7 +3670,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             };
 
             if (instance.parent) {
-                serializationInstance.parentId = instance.parent.uniqueId;
+                instance.parent._serializeAsParent(serializationInstance);
             }
 
             if (instance.rotationQuaternion) {
@@ -3694,7 +3707,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         if (this._thinInstanceDataStorage.instancesCount && this._thinInstanceDataStorage.matrixData) {
             serializationObject.thinInstances = {
                 instancesCount: this._thinInstanceDataStorage.instancesCount,
-                matrixData: Tools.SliceToArray(this._thinInstanceDataStorage.matrixData),
+                matrixData: Array.from(this._thinInstanceDataStorage.matrixData),
                 matrixBufferSize: this._thinInstanceDataStorage.matrixBufferSize,
                 enablePicking: this.thinInstanceEnablePicking,
             };
@@ -3707,7 +3720,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
                 };
 
                 for (const kind in this._userThinInstanceBuffersStorage.data) {
-                    userThinInstance.data[kind] = Tools.SliceToArray(this._userThinInstanceBuffersStorage.data[kind]);
+                    userThinInstance.data[kind] = Array.from(this._userThinInstanceBuffersStorage.data[kind]);
                     userThinInstance.sizes[kind] = this._userThinInstanceBuffersStorage.sizes[kind];
                     userThinInstance.strides[kind] = this._userThinInstanceBuffersStorage.strides[kind];
                 }
@@ -3859,6 +3872,7 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
             mesh = new Mesh(parsedMesh.name, scene);
         }
         mesh.id = parsedMesh.id;
+        mesh._waitingParsedUniqueId = parsedMesh.uniqueId;
 
         if (Tags) {
             Tags.AddTagsTo(mesh, parsedMesh.tags);
@@ -3928,6 +3942,10 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
         // Parent
         if (parsedMesh.parentId !== undefined) {
             mesh._waitingParentId = parsedMesh.parentId;
+        }
+
+        if (parsedMesh.parentInstanceIndex !== undefined) {
+            mesh._waitingParentInstanceIndex = parsedMesh.parentInstanceIndex;
         }
 
         // Actions
@@ -4090,6 +4108,10 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
                 if (parsedInstance.parentId !== undefined) {
                     instance._waitingParentId = parsedInstance.parentId;
+                }
+
+                if (parsedInstance.parentInstanceIndex !== undefined) {
+                    instance._waitingParentInstanceIndex = parsedInstance.parentInstanceIndex;
                 }
 
                 if (parsedInstance.isEnabled !== undefined && parsedInstance.isEnabled !== null) {
@@ -4413,12 +4435,12 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
     /**
      * Merge the array of meshes into a single mesh for performance reasons.
-     * @param meshes defines he vertices source.  They should all be of the same material.  Entries can empty
-     * @param disposeSource when true (default), dispose of the vertices from the source meshes
-     * @param allow32BitsIndices when the sum of the vertices > 64k, this must be set to true
-     * @param meshSubclass when set, vertices inserted into this Mesh.  Meshes can then be merged into a Mesh sub-class.
-     * @param subdivideWithSubMeshes when true (false default), subdivide mesh to his subMesh array with meshes source.
-     * @param multiMultiMaterials when true (false default), subdivide mesh and accept multiple multi materials, ignores subdivideWithSubMeshes.
+     * @param meshes array of meshes with the vertices to merge. Entries cannot be empty meshes.
+     * @param disposeSource when true (default), dispose of the vertices from the source meshes.
+     * @param allow32BitsIndices when the sum of the vertices > 64k, this must be set to true.
+     * @param meshSubclass (optional) can be set to a Mesh where the merged vertices will be inserted.
+     * @param subdivideWithSubMeshes when true (false default), subdivide mesh into subMeshes.
+     * @param multiMultiMaterials when true (false default), subdivide mesh into subMeshes with multiple materials, ignores subdivideWithSubMeshes.
      * @returns a new mesh
      */
     public static MergeMeshes(
@@ -4434,12 +4456,12 @@ export class Mesh extends AbstractMesh implements IGetSetVerticesData {
 
     /**
      * Merge the array of meshes into a single mesh for performance reasons.
-     * @param meshes defines he vertices source.  They should all be of the same material.  Entries can empty
-     * @param disposeSource when true (default), dispose of the vertices from the source meshes
-     * @param allow32BitsIndices when the sum of the vertices > 64k, this must be set to true
-     * @param meshSubclass when set, vertices inserted into this Mesh.  Meshes can then be merged into a Mesh sub-class.
-     * @param subdivideWithSubMeshes when true (false default), subdivide mesh to his subMesh array with meshes source.
-     * @param multiMultiMaterials when true (false default), subdivide mesh and accept multiple multi materials, ignores subdivideWithSubMeshes.
+     * @param meshes array of meshes with the vertices to merge. Entries cannot be empty meshes.
+     * @param disposeSource when true (default), dispose of the vertices from the source meshes.
+     * @param allow32BitsIndices when the sum of the vertices > 64k, this must be set to true.
+     * @param meshSubclass (optional) can be set to a Mesh where the merged vertices will be inserted.
+     * @param subdivideWithSubMeshes when true (false default), subdivide mesh into subMeshes.
+     * @param multiMultiMaterials when true (false default), subdivide mesh into subMeshes with multiple materials, ignores subdivideWithSubMeshes.
      * @returns a new mesh
      */
     public static MergeMeshesAsync(
